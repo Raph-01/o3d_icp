@@ -11,8 +11,9 @@ Setting up git account
 - git config --global user.name "Your Git Name"
 - git config --global user.email "youremail@example.com"
 
-Clone Github repository to your local machine (1) and navigate to the repository (2)
-This assumes BASH context is set to the location where you want the repository to be placed
+Navigate to where you want the Github repository to be placed (1)
+Clone Github repository to your local machine (2) and navigate to the repository (3)
+- cd path/to/your/desired/folder
 - git clone https://github.com/yourusername/my_project.git
 - cd my_project
 
