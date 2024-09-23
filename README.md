@@ -56,14 +56,14 @@ Clone Github repository to your local machine (2) and navigate to the repository
 We will be using Python 3.11.9. When prompted during the Python install, check the box “Add Python to PATH” to ensure python and pip is accessible from the cmd.  
 Download and Install Python 3.11.9 https://www.python.org/downloads/release/python-3119/   
 Verify Python and pip version.
-- python --version
+- python3.11 --version
 - pip --version
 
 Create Virtual Environment:  
 Navigate to your project repository (1).  
 Create virtual environment (2), then activate (3).  
 - cd path\to\your\my_project
-- py -3.11 -m venv venv
+- python3.11 -m venv venv
 - venv\Scripts\activate
 
 Install Packages:  
