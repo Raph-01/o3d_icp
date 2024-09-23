@@ -51,7 +51,7 @@ Clone Github repository to your local machine (2) and navigate to the repository
 - git clone https://github.com/yourusername/my_project.git
 - cd my_project
 
-###Python
+### Python
 We will be using Python 3.11.9. When prompt during the Python install, check the box “Add Python to PATH” to ensure python and pip is accessible from the cmd.
 Download and Install Python 3.11.9 https://www.python.org/downloads/release/python-3119/ 
 Verify Python and pip version
