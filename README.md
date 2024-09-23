@@ -6,7 +6,6 @@ Installing Git and verifying version:
 - sudo apt-get update
 - sudo apt-get install git
 - git --version
----------- <BASH> ----------
 
 Setting up git account
 - git config --global user.name "Your Git Name"
@@ -44,40 +43,30 @@ Verify git version:
 - git --version
 
 Setting up git account
----------- <CMD> ----------
-git config --global user.name "Your Git Name"
-git config --global user.email "youremail@example.com"
----------- <CMD> ----------
+- git config --global user.name "Your Git Name"
+- git config --global user.email "youremail@example.com"
 
 Navigate to the desired folder (1).
 Clone Github repository to your local machine (2) and navigate to the repository (3)
----------- <CMD> ----------
-cd path\to\your\desired\folder
-git clone https://github.com/yourusername/my_project.git
-cd my_project
----------- <CMD> ----------
+- cd path\to\your\desired\folder
+- git clone https://github.com/yourusername/my_project.git
+- cd my_project
 
 ###Python
 We will be using Python 3.11.9. When prompt during the Python install, check the box “Add Python to PATH” to ensure python and pip is accessible from the cmd.
 Download and Install Python 3.11.9 https://www.python.org/downloads/release/python-3119/ 
 Verify Python and pip version
----------- <CMD> ----------
-python –version
-pip --version
----------- <CMD> ----------
+- python –version
+- pip --version
 
 Create Virtual Environment:
 Navigate to your project repository (1)
 Create virtual environment (2), then activate (3)
----------- <CMD> ----------
-cd path\to\your\my_project
-python -m venv venv
-venv\Scripts\activate
----------- <CMD> ----------
+- cd path\to\your\my_project
+- python -m venv venv
+- venv\Scripts\activate
 
 Install Packages:
 Get requirements.txt from GitHub, place in project folder
 With venv activated, install package
----------- <CMD> ----------
-pip install -r requirements.txt
----------- <CMD> ----------
+- pip install -r requirements.txt
