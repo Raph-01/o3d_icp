@@ -1,6 +1,6 @@
 # Getting Started
 
-## Linux BASH
+## Linux (BASH)
 ### Github
 Installing Git and verifying version:
 - sudo apt-get update
@@ -35,7 +35,7 @@ Get requirements.txt from GitHub, place in project folder
 With venv activated, install package
 - pip install -r requirements.txt
 
-## Windows CMD
+## Windows (CMD)
 ### Github
 Download and Install Git from https://git-scm.com/download/win
 Verify git version:
