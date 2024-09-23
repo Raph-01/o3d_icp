@@ -35,7 +35,6 @@ Get requirements.txt from GitHub, place in project folder
 With venv activated, install package
 - pip install -r requirements.txt
 
-** _____________________________________________________________________________________ **
 ## Windows CMD
 ### Github
 Download and Install Git from https://git-scm.com/download/win
