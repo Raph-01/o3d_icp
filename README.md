@@ -1,6 +1,6 @@
 # Getting Started
 
-## Linux
+## Linux BASH
 ### Github
 Installing Git and verifying version:
 ---------- <BASH> ----------
@@ -47,13 +47,11 @@ With venv activated, install package
 pip install -r requirements.txt
 ---------- <BASH> ----------
 ** _____________________________________________________________________________________ **
-## Windows
+## Windows CMD
 ### Github
 Download and Install Git from https://git-scm.com/download/win
 Verify git version:
----------- <CMD> ----------
-git --version
----------- <CMD> ----------
+- git --version
 
 Setting up git account
 ---------- <CMD> ----------
