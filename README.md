@@ -3,49 +3,39 @@
 ## Linux BASH
 ### Github
 Installing Git and verifying version:
----------- <BASH> ----------
-sudo apt-get update
-sudo apt-get install git
-git --version
+- sudo apt-get update
+- sudo apt-get install git
+- git --version
 ---------- <BASH> ----------
 
 Setting up git account
----------- <BASH> ----------
-git config --global user.name "Your Git Name"
-git config --global user.email "youremail@example.com"
----------- <BASH> ----------
+- git config --global user.name "Your Git Name"
+- git config --global user.email "youremail@example.com"
 
 Clone Github repository to your local machine (1) and navigate to the repository (2)
 This assumes BASH context is set to the location where you want the repository to be placed
----------- <BASH> ----------
-git clone https://github.com/yourusername/my_project.git
-cd my_project
----------- <BASH> ----------
+- git clone https://github.com/yourusername/my_project.git
+- cd my_project
 
 ### Python
 We will be using Python 3.11
 3rd line includes the Virtual Environment package
----------- <BASH> ----------
-sudo add-apt-repository ppa:deadsnakes/ppa
-sudo apt-get update
-sudo apt-get install python3.11 python3.11-venv
----------- <BASH> ----------
+- sudo add-apt-repository ppa:deadsnakes/ppa
+- sudo apt-get update
+- sudo apt-get install python3.11 python3.11-venv
 
 Create Virtual Environment:
 Navigate to your project directory (1) (or create using “mkdir”)
 Create virtual environment (2), then activate (3)
----------- <BASH> ----------
-cd my_project
-python3.11 -m venv venv
-source venv/bin/activate
----------- <BASH> ----------
+- cd my_project
+- python3.11 -m venv venv
+- source venv/bin/activate
 
 Install Packages:
 Get requirements.txt from GitHub, place in project folder
 With venv activated, install package
----------- <BASH> ----------
-pip install -r requirements.txt
----------- <BASH> ----------
+- pip install -r requirements.txt
+
 ** _____________________________________________________________________________________ **
 ## Windows CMD
 ### Github
