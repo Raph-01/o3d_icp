@@ -11,29 +11,29 @@ Setting up git account:
 - git config --global user.name "Your Git Name"
 - git config --global user.email "youremail@example.com"
 
-Navigate to where you want the Github repository to be placed (1).
+Navigate to where you want the Github repository to be placed (1).  
 Clone Github repository to your local machine (2) and navigate to the repository (3).
 - cd path/to/your/desired/folder
 - git clone https://github.com/yourusername/my_project.git
 - cd my_project
 
 ### Python
-We will be using Python 3.11.
-3rd line includes the Virtual Environment package.
+We will be using Python 3.11.  
+3rd line includes the Virtual Environment package.  
 - sudo add-apt-repository ppa:deadsnakes/ppa
 - sudo apt-get update
 - sudo apt-get install python3.11 python3.11-venv
 
 Create Virtual Environment:
-Navigate to your project directory (1) (or create using “mkdir”)
-Create virtual environment (2), then activate (3)
+Navigate to your project directory (1) (or create using “mkdir”).  
+Create virtual environment (2), then activate (3).
 - cd my_project
 - python3.11 -m venv venv
 - source venv/bin/activate
 
 Install Packages:
-Get requirements.txt from GitHub, place in project folder.
-With venv activated, install package.
+Get requirements.txt from GitHub, place in project folder.  
+With venv activated, install package.  
 - pip install -r requirements.txt
 
 ## Windows (CMD)
