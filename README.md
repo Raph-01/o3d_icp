@@ -27,7 +27,7 @@ We will be using Python 3.11.
 Create Virtual Environment:  
 Navigate to your project directory (1) (or create using “mkdir”).  
 Create virtual environment (2), then activate (3).
-- cd my_project
+- cd path/to/your/desired/folder
 - python3.11 -m venv venv
 - source venv/bin/activate
 
@@ -63,7 +63,7 @@ Create Virtual Environment:
 Navigate to your project repository (1).  
 Create virtual environment (2), then activate (3).  
 - cd path\to\your\my_project
-- python -m venv venv
+- py -3.11 -m venv venv
 - venv\Scripts\activate
 
 Install Packages:  
