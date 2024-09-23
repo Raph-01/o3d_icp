@@ -1,6 +1,7 @@
-Getting Started
-Linux
-Github
+# Getting Started
+
+## Linux
+### Github
 Installing Git and verifying version:
 ---------- <BASH> ----------
 sudo apt-get update
@@ -18,7 +19,8 @@ This assumes BASH context is set to the location where you want the repository t
 git clone https://github.com/yourusername/my_project.git
 cd my_project
 ---------- <BASH> ----------
-Python
+
+### Python
 We will be using Python 3.11
 3rd line includes the Virtual Environment package
 ---------- <BASH> ----------
@@ -40,10 +42,9 @@ With venv activated, install package
 ---------- <BASH> ----------
 pip install -r requirements.txt
 ---------- <BASH> ----------
-
- 
-Windows
-Github
+** _____________________ **
+## Windows
+### Github
 Download and Install Git from https://git-scm.com/download/win
 Verify git version:
 ---------- <CMD> ----------
@@ -61,7 +62,8 @@ cd path\to\your\desired\folder
 git clone https://github.com/yourusername/my_project.git
 cd my_project
 ---------- <CMD> ----------
-Python
+
+###Python
 We will be using Python 3.11.9. When prompt during the Python install, check the box “Add Python to PATH” to ensure python and pip is accessible from the cmd.
 Download and Install Python 3.11.9 https://www.python.org/downloads/release/python-3119/ 
 Verify Python and pip version
