@@ -8,7 +8,7 @@ alias deactivate 'test $?_OLD_VIRTUAL_PATH != 0 && setenv PATH "$_OLD_VIRTUAL_PA
 # Unset irrelevant variables.
 deactivate nondestructive
 
-setenv VIRTUAL_ENV "/home/spot-spare-red/Documents/VIS_2024/Open3D_ICP_Tutorial/venv8"
+setenv VIRTUAL_ENV "/home/spot-vision/Documents/o3d_icp/venv8"
 
 set _OLD_VIRTUAL_PATH="$PATH"
 setenv PATH "$VIRTUAL_ENV/bin:$PATH"

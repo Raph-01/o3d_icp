@@ -29,7 +29,7 @@ end
 # unset irrelevant variables
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/home/spot-spare-red/Documents/VIS_2024/Open3D_ICP_Tutorial/venv8"
+set -gx VIRTUAL_ENV "/home/spot-vision/Documents/o3d_icp/venv8"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

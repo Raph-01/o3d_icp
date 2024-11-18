@@ -9,6 +9,7 @@ import threading
 import sys
 import open3d as o3d
 import cv2
+import pickle
 
 # Class Creation
 ## Custom Classes
@@ -291,45 +292,53 @@ def pointcloud(out, verts, texcoords, color, painter=True):
 ## PyRealsense2 Script #############
 state = AppState()
 
-# Configure depth and color streams
-pipeline = rs.pipeline()
-config = rs.config()
-
-pipeline_wrapper = rs.pipeline_wrapper(pipeline)
-pipeline_profile = config.resolve(pipeline_wrapper)
-device = pipeline_profile.get_device()
-
 ### o3d
 vis = o3d.visualization.Visualizer()
 vis.create_window("Tests")
 pcd = o3d.geometry.PointCloud()
 ###
 
-found_rgb = False
-for s in device.sensors:
-    if s.get_info(rs.camera_info.name) == 'RGB Camera':
-        found_rgb = True
-        break
-if not found_rgb:
-    print("The demo requires Depth camera with Color sensor")
-    exit(0)
+### Choose read from file or live camera capture, or record live capture ###
+read_recording = True # Set to True if capture comes from recording
+record_enabled = False # Change to True to record. read_recording must be False to unable recording
+max_frame = 50 # Will record until max frame reached, then exit script. Condition checked only if record_enabled
 
-config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-config.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
+# Configure depth and color streams
+if not read_recording:    
+    pipeline = rs.pipeline()
+    config = rs.config()
+    pipeline_wrapper = rs.pipeline_wrapper(pipeline)
+    pipeline_profile = config.resolve(pipeline_wrapper)
+    device = pipeline_profile.get_device()
 
-# Trying Recording Raw, save to BAG
-record_enabled = True # Change to True to record
-max_frame = 10 # Will record until max frame reached, then exit script. Condition checked only if record_enabled
-if record_enabled:
-    config.enable_record_to_file("/home/spot-spare-red/Documents/VIS_2024/Open3D_ICP/Recording/MyRecording.bag")
+    found_rgb = False
+    for s in device.sensors:
+        if s.get_info(rs.camera_info.name) == 'RGB Camera':
+            found_rgb = True
+            break
 
-# Start streaming
-profile = pipeline.start(config)
+    if not found_rgb:
+        print("The demo requires Depth camera with Color sensor")
+        exit(0)
 
-# Get stream profile and camera intrinsics
-depth_profile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
-depth_intrinsics = depth_profile.get_intrinsics()
-w, h = depth_intrinsics.width, depth_intrinsics.height
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
+
+    # Start streaming
+    profile = pipeline.start(config)
+
+    # Get stream profile and camera intrinsics
+    depth_profile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
+    depth_intrinsics = depth_profile.get_intrinsics()
+    w, h = depth_intrinsics.width, depth_intrinsics.height
+    if record_enabled:
+        recording_intrinsics = [w, h]
+        np.save("/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy", recording_intrinsics, allow_pickle=True)
+else:
+    savedrecording = np.load("/home/spot-vision/Documents/o3d_icp/Recording/myrecording1.npy" , allow_pickle=True)
+    last_recordedtimestamp = savedrecording[1][3]
+    savedrecordingintrinsics = np.load("/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" , allow_pickle=True)
+    w, h = savedrecordingintrinsics[0], savedrecordingintrinsics[1]
 
 # Processing blocks
 pc = rs.pointcloud()
@@ -345,118 +354,155 @@ out = np.empty((h, w, 3), dtype=np.uint8)
 
 run_loop = True
 i=0
-while run_loop:
-    # Grab camera data
-    
-    # Record Safety
-    if record_enabled:
-        if i > max_frame:
-            run_loop = False   
-        i+=1
-    
-    if not state.paused:
-        # Wait for a coherent pair of frames: depth and color       
-        frames = pipeline.wait_for_frames()
+recording = [["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]]
+readrecording_frameNUM = 2 # If read recording frame iterator to replace camera stream. Skip 0 and 1 (column title + 1st frame)
+readrecording_segNUM = 1 # Video segment number, used for both read and write recording
 
-        depth_frame = frames.get_depth_frame()
-        color_frame = frames.get_color_frame()
+try:
+    while run_loop:       
+        ### pipeline for live camera capture
+        if not state.paused and not read_recording:
+            # Wait for a coherent pair of frames: depth and color       
+            frames = pipeline.wait_for_frames()
 
-        depth_frame = decimate.process(depth_frame)
+            depth_frame = frames.get_depth_frame()
+            color_frame = frames.get_color_frame()
+            frame_timestamp = frames.get_timestamp()
+            depth_frame = decimate.process(depth_frame)
 
-        # Grab new intrinsics (may be changed by decimation)
-        depth_intrinsics = rs.video_stream_profile(
-            depth_frame.profile).get_intrinsics()
-        w, h = depth_intrinsics.width, depth_intrinsics.height # The Decimate reduces resolution by 2 folds
+            # Grab new intrinsics (may be changed by decimation)
+            depth_intrinsics = rs.video_stream_profile(
+                depth_frame.profile).get_intrinsics()
+            w, h = depth_intrinsics.width, depth_intrinsics.height # The Decimate reduces resolution by 2 folds
 
-        depth_image = np.asanyarray(depth_frame.get_data())
-        color_image = np.asanyarray(color_frame.get_data())
+            depth_image = np.asanyarray(depth_frame.get_data())
+            color_image = np.asanyarray(color_frame.get_data())
 
-        depth_colormap = np.asanyarray(
-            colorizer.colorize(depth_frame).get_data())
+            depth_colormap = np.asanyarray(
+                colorizer.colorize(depth_frame).get_data())
 
-        if state.color:
-            mapped_frame, color_source = color_frame, color_image
-        else:
-            mapped_frame, color_source = depth_frame, depth_colormap
+            if state.color:
+                mapped_frame, color_source = color_frame, color_image
+            else:
+                mapped_frame, color_source = depth_frame, depth_colormap
 
-        points = pc.calculate(depth_frame)
-        pc.map_to(mapped_frame)
+            points = pc.calculate(depth_frame)
+            pc.map_to(mapped_frame)
 
-        # Pointcloud data to arrays
-        v, t = points.get_vertices(), points.get_texture_coordinates()
-        verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
-        texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
+            # Pointcloud data to arrays
+            v, t = points.get_vertices(), points.get_texture_coordinates()
+            verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
+            texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
+        
+        ### Pipeline for reading a recorded video as save by this script
+        # compoundframe data columns
+        # ["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]
+        elif not state.paused and read_recording:
+                compoundframe = savedrecording[readrecording_frameNUM]
+                delta_T = compoundframe[3] - last_recordedtimestamp # (ms)
+                
+                last_recordedtimestamp = compoundframe[3] # Update last timestamp for next iteration
+                
+                verts = compoundframe[0]
+                texcoords = compoundframe[1]
+                color_source = compoundframe[2]
+                readrecording_frameNUM += 1
+                
+                if readrecording_frameNUM > len(savedrecording)-1:
+                    try:
+                        readrecording_segNUM += 1
+                        savedrecording = np.load(f"/home/spot-vision/Documents/o3d_icp/Recording/myrecording{readrecording_segNUM}.npy" , allow_pickle=True)
+                        readrecording_frameNUM = 1
+                    except Exception: # next segment doesnt exist -> end of recording reached
+                        run_loop = False
 
         ### o3d
         vis.add_geometry(pcd)
         pcd.clear()
-        
-        if not color_frame or not depth_frame:
-            continue
-        vtx = np.asanyarray(points.get_vertices(dims= 2))
-        pcd.points = o3d.utility.Vector3dVector(vtx)
+        pcd.points = o3d.utility.Vector3dVector(verts)
         ###
 
-    # Render
-    now = time.time()
+        if record_enabled:
+            recording.append([verts, texcoords, color_source, frame_timestamp])
+            
+            if len(recording) >=10:
+                recording = np.asarray(recording, dtype=object)
+                np.save(f"/home/spot-vision/Documents/o3d_icp/Recording/myrecording{readrecording_segNUM}.npy", recording, allow_pickle=True)
+                readrecording_segNUM += 1
+                recording = [["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]]
 
-    out.fill(0)
+            if i > max_frame:
+                run_loop = False   
+            i+=1
+            print(i)
 
-    grid(out, (0, 0.5, 1), size=1, n=10)
-    frustum(out, depth_intrinsics)
-    axes(out, view([0, 0, 0]), state.rotation, size=0.1, thickness=1)
+        # Render
+        now = time.time()
 
-    if not state.scale or out.shape[:2] == (h, w):
-        pointcloud(out, verts, texcoords, color_source)
-    else:
-        tmp = np.zeros((h, w, 3), dtype=np.uint8)
-        pointcloud(tmp, verts, texcoords, color_source)
-        tmp = cv2.resize(
-            tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
-        np.putmask(out, tmp > 0, tmp)   
+        out.fill(0)
 
-    if any(state.mouse_btns):
-        axes(out, view(state.pivot), state.rotation, thickness=4)
+        grid(out, (0, 0.5, 1), size=1, n=10)
+        # frustum(out, depth_intrinsics)
+        axes(out, view([0, 0, 0]), state.rotation, size=0.1, thickness=1)
 
-    dt = time.time() - now
+        if not state.scale or out.shape[:2] == (h, w):
+            pointcloud(out, verts, texcoords, color_source)
+        else:
+            tmp = np.zeros((h, w, 3), dtype=np.uint8)
+            pointcloud(tmp, verts, texcoords, color_source)
+            tmp = cv2.resize(
+                tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
+            np.putmask(out, tmp > 0, tmp)   
 
-    cv2.setWindowTitle(
-        state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) %s" %
-        (w, h, 1.0/dt, dt*1000, "PAUSED" if state.paused else ""))
+        if any(state.mouse_btns):
+            axes(out, view(state.pivot), state.rotation, thickness=4)
 
-    cv2.imshow(state.WIN_NAME, out)
-    key = cv2.waitKey(1)
+        dt = time.time() - now
 
-    ### o3d
-    vis.update_geometry(pcd)
-    vis.poll_events()
-    vis.update_renderer()
-    ###
+        cv2.setWindowTitle(
+            state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) %s" %
+            (w, h, 1.0/dt, dt*1000, "PAUSED" if state.paused else ""))
 
-    if key == ord("r"):
-        state.reset()
+        cv2.imshow(state.WIN_NAME, out)
+        key = cv2.waitKey(1)
 
-    if key == ord("p"):
-        state.paused ^= True
+        ### o3d
+        vis.update_geometry(pcd)
+        vis.poll_events()
+        vis.update_renderer()
+        
+        if read_recording:
+            time.sleep(delta_T/1000)
+        ###
 
-    if key == ord("d"):
-        state.decimate = (state.decimate + 1) % 3
-        decimate.set_option(rs.option.filter_magnitude, 2 ** state.decimate)
+        if key == ord("p"):
+            state.paused ^= True
 
-    if key == ord("z"):
-        state.scale ^= True
+        if key == ord("d"):
+            state.decimate = (state.decimate + 1) % 3
+            decimate.set_option(rs.option.filter_magnitude, 2 ** state.decimate)
 
-    if key == ord("c"):
-        state.color ^= True
+        if key == ord("z"):
+            state.scale ^= True
 
-    if key == ord("s"):
-        cv2.imwrite('./out.png', out)
+        if key == ord("c"):
+            state.color ^= True
 
-    if key == ord("e"):
-        points.export_to_ply('./out.ply', mapped_frame)
+        if key == ord("s"):
+            cv2.imwrite('./out.png', out)
 
-    if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
-        break
+        if key == ord("e"):
+            points.export_to_ply('./out.ply', mapped_frame)
+
+        if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
+            break
    
 # Stop streaming
-pipeline.stop()
+finally:
+    if not read_recording:
+        pipeline.stop()
+        profile = pipeline = None
+
+    if record_enabled:
+        recording = np.asarray(recording, dtype=object)
+        np.save(f"/home/spot-vision/Documents/o3d_icp/Recording/myrecording{readrecording_segNUM}.npy", recording, allow_pickle=True)
