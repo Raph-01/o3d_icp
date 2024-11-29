@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""
+Created on Mon Nov 25 10:49:36 2024
+
+@author: Vision Subteam's Awesome Core Team, with the help of Alex
+"""
 
 # Import Statements
 import pyrealsense2 as rs
@@ -10,6 +15,7 @@ import sys
 import open3d as o3d
 import cv2
 import pickle
+import os
 
 # Class Creation
 ## Custom Classes
@@ -75,51 +81,7 @@ class AppState:
     def pivot(self):
         return self.translation + np.array((0, 0, self.distance), dtype=np.float32)
 
-# Script
-## Custom Script
-"""
-try:           
-    # print("inside"); sys.stdout.flush()
-    depth_pipeline = rs.pipeline()
-    config_depth = rs.config()
-    config_depth.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    depth_pipeline.start(config_depth)
-    depthstream = StoppableCameraThread(depth_pipeline)
-    depthstream.start()
-    
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name="RealSense Depth Visualization")
-    o3d_pcd = o3d.geometry.PointCloud()
-    vis.add_geometry(o3d_pcd)
-    
-    time.sleep(2)
-    
-    depth_frame = depthstream.pull_pointcloud()
-    # print(type(depth_frame)); sys.stdout.flush()
-    if depth_frame is not None:
-        while True:
-            # print("inside"); sys.stdout.flush()
-            depth_frame = depthstream.pull_pointcloud()
-
-            vertices = np.ascontiguousarray(np.array(depth_frame.get_vertices()).view(np.float32).reshape(-1, 3))
-            valid_points = vertices[np.all(np.isfinite(vertices), axis=1)]
-            # print(f"Valid points: {len(valid_points)}")
-            o3d_pcd.points = o3d.utility.Vector3dVector(valid_points)
-            o3dpoints = np.asarray(o3d_pcd.points)
-            vis.update_geometry(o3d_pcd)
-            vis.poll_events()
-            vis.update_renderer()
-            time.sleep(0.5)
-
-except KeyboardInterrupt:
-    print("Real-time visualization stopped.")
-
-finally:
-    depthstream.stop()
-    depthstream.join()
-    depth_pipeline.stop()
-    vis.destroy_window()            
-"""
+# PyRealSense2 Function
 
 def mouse_cb(event, x, y, flags, param):
 
@@ -289,19 +251,52 @@ def pointcloud(out, verts, texcoords, color, painter=True):
     # perform uv-mapping
     out[i[m], j[m]] = color[u[m], v[m]]
 
-## PyRealsense2 Script #############
-state = AppState()
-
-### o3d
-vis = o3d.visualization.Visualizer()
-vis.create_window("Tests")
-pcd = o3d.geometry.PointCloud()
-###
-
+"""
+USER INPUT START
+"""
 ### Choose read from file or live camera capture, or record live capture ###
-read_recording = True # Set to True if capture comes from recording
-record_enabled = False # Change to True to record. read_recording must be False to unable recording
-max_frame = 50 # Will record until max frame reached, then exit script. Condition checked only if record_enabled
+Enable_Open3D_Visualiser = False
+Enable_OpenCV_Visualiser = False
+
+Select_Mode = "Read" # "Read" "Live" "Record Live"
+max_recorded_frame = 50 # Will record until max frame reached, then exit script. Condition checked only if Select_Mode == "Record Live"
+
+# Orin Paths
+## Video: "/home/spot-vision/Documents/o3d_icp/Recording/myrecording"
+## Video Intrinsics: "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy"
+
+read_video_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecording" # Path String with file name, without index nor extension
+read_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name, without extension
+
+record_video_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecording" # Path String with file name, without index nor extension
+record_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name, without extension
+"""
+USER INPUT END
+"""
+
+# RANSAC and ICP parameters
+voxel_size = 0.05  # Change depending on point cloud size
+radius_normal = voxel_size * 2
+radius_feature = voxel_size * 10
+distance_threshold = voxel_size * 3
+threshold = 0.1
+rmse_threshold = 0.05  # User-defined RMSE threshold
+num_ransac_iterations = 5
+
+# Model Initialization
+## Load source mesh and convert to point cloud
+origin = np.array([0, 0, 0])
+source = o3d.io.read_triangle_mesh("Target_v10.stl") ### REVISE FOR ORIN
+source_pcd = source.sample_points_poisson_disk(number_of_points=5000)
+source_pcd.scale(0.001, origin)
+source_down = source_pcd.voxel_down_sample(voxel_size) # Downsample and estimate normals for point cloud
+source_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
+# Compute FPFH features
+source_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+    source_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+
+# Set script states
+read_recording, record_enabled = (True, False) if Select_Mode == "Read" else (False, True) if Select_Mode == "Record Live" else (False, False)
 
 # Configure depth and color streams
 if not read_recording:    
@@ -333,34 +328,45 @@ if not read_recording:
     w, h = depth_intrinsics.width, depth_intrinsics.height
     if record_enabled:
         recording_intrinsics = [w, h]
-        np.save("/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy", recording_intrinsics, allow_pickle=True)
+        np.save(record_video_intrinsics_path, recording_intrinsics, allow_pickle=True)
 else:
-    savedrecording = np.load("/home/spot-vision/Documents/o3d_icp/Recording/myrecording1.npy" , allow_pickle=True)
+    savedrecording = np.load(read_video_path+str(1), allow_pickle=True)
     last_recordedtimestamp = savedrecording[1][3]
-    savedrecordingintrinsics = np.load("/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" , allow_pickle=True)
+    savedrecordingintrinsics = np.load(read_video_intrinsics_path, allow_pickle=True)
     w, h = savedrecordingintrinsics[0], savedrecordingintrinsics[1]
 
 # Processing blocks
+state = AppState() # Is used somewhere else than ocv visualizer
 pc = rs.pointcloud()
 decimate = rs.decimation_filter()
 decimate.set_option(rs.option.filter_magnitude, 2 ** state.decimate)
 colorizer = rs.colorizer()
 
-cv2.namedWindow(state.WIN_NAME, cv2.WINDOW_AUTOSIZE)
-cv2.resizeWindow(state.WIN_NAME, w, h)
-cv2.setMouseCallback(state.WIN_NAME, mouse_cb)
+# Initialize OpenCV Visualiser
+if Enable_OpenCV_Visualiser:
+    cv2.namedWindow(state.WIN_NAME, cv2.WINDOW_AUTOSIZE)
+    cv2.resizeWindow(state.WIN_NAME, w, h)
+    cv2.setMouseCallback(state.WIN_NAME, mouse_cb)
 
+# Initialize Open3D Visualiser
+if Enable_Open3D_Visualiser:
+    vis = o3d.visualization.Visualizer()
+    vis.create_window("Tests")
+    axes = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=origin)
+
+# Script
+target_pcd = o3d.geometry.PointCloud()
 out = np.empty((h, w, 3), dtype=np.uint8)
 
 run_loop = True
 i=0
 recording = [["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]]
 readrecording_frameNUM = 2 # If read recording frame iterator to replace camera stream. Skip 0 and 1 (column title + 1st frame)
-readrecording_segNUM = 1 # Video segment number, used for both read and write recording
+recording_segNUM = 1 # Video segment number, used for both read and write recording
 
 try:
     while run_loop:       
-        ### pipeline for live camera capture
+        # Live Camera
         if not state.paused and not read_recording:
             # Wait for a coherent pair of frames: depth and color       
             frames = pipeline.wait_for_frames()
@@ -394,11 +400,9 @@ try:
             verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
             texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
         
-        ### Pipeline for reading a recorded video as save by this script
-        # compoundframe data columns
-        # ["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]
+        # Reading a Recorded Video
         elif not state.paused and read_recording:
-                compoundframe = savedrecording[readrecording_frameNUM]
+                compoundframe = savedrecording[readrecording_frameNUM] # ["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]
                 delta_T = compoundframe[3] - last_recordedtimestamp # (ms)
                 
                 last_recordedtimestamp = compoundframe[3] # Update last timestamp for next iteration
@@ -410,93 +414,161 @@ try:
                 
                 if readrecording_frameNUM > len(savedrecording)-1:
                     try:
-                        readrecording_segNUM += 1
-                        savedrecording = np.load(f"/home/spot-vision/Documents/o3d_icp/Recording/myrecording{readrecording_segNUM}.npy" , allow_pickle=True)
+                        recording_segNUM += 1
+                        savedrecording = np.load(read_video_path+str(recording_segNUM), allow_pickle=True)
                         readrecording_frameNUM = 1
                     except Exception: # next segment doesnt exist -> end of recording reached
                         run_loop = False
-
-        ### o3d
-        vis.add_geometry(pcd)
-        pcd.clear()
-        pcd.points = o3d.utility.Vector3dVector(verts)
-        ###
 
         if record_enabled:
             recording.append([verts, texcoords, color_source, frame_timestamp])
             
             if len(recording) >=10:
                 recording = np.asarray(recording, dtype=object)
-                np.save(f"/home/spot-vision/Documents/o3d_icp/Recording/myrecording{readrecording_segNUM}.npy", recording, allow_pickle=True)
-                readrecording_segNUM += 1
+                np.save(record_video_path+str(recording_segNUM), recording, allow_pickle=True)
+                recording_segNUM += 1
                 recording = [["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]]
 
-            if i > max_frame:
+            if i > max_recorded_frame:
                 run_loop = False   
             i+=1
             print(i)
 
-        # Render
-        now = time.time()
-
-        out.fill(0)
-
-        grid(out, (0, 0.5, 1), size=1, n=10)
-        # frustum(out, depth_intrinsics)
-        axes(out, view([0, 0, 0]), state.rotation, size=0.1, thickness=1)
-
-        if not state.scale or out.shape[:2] == (h, w):
-            pointcloud(out, verts, texcoords, color_source)
-        else:
-            tmp = np.zeros((h, w, 3), dtype=np.uint8)
-            pointcloud(tmp, verts, texcoords, color_source)
-            tmp = cv2.resize(
-                tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
-            np.putmask(out, tmp > 0, tmp)   
-
-        if any(state.mouse_btns):
-            axes(out, view(state.pivot), state.rotation, thickness=4)
-
-        dt = time.time() - now
-
-        cv2.setWindowTitle(
-            state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) %s" %
-            (w, h, 1.0/dt, dt*1000, "PAUSED" if state.paused else ""))
-
-        cv2.imshow(state.WIN_NAME, out)
-        key = cv2.waitKey(1)
-
-        ### o3d
-        vis.update_geometry(pcd)
-        vis.poll_events()
-        vis.update_renderer()
+        # Pointcloud Vertices (verts) processing 
+        ## remove background (index z not within  0-2m and delete that point)
+        indicesZ = np.where(not(0 < verts[:,2] > 2))[0] # find where 0 m > z > 2 m
+        verts = np.delete(verts, indicesZ, axis=0)
         
+        target_pcd.points = o3d.utility.Vector3dVector(verts)
+        target_pcd = target_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)[0]
+        target_down = target_pcd.voxel_down_sample(voxel_size) # Downsample and estimate normals for point cloud
+        target_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))  
+
+        # Compute FPFH features
+        target_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
+            target_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
+        
+        # RANSAC
+        ransac_transformations = []
+        for _ in range(num_ransac_iterations):
+            ransac = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
+                source_down, target_down, source_fpfh, target_fpfh,
+                mutual_filter=True,
+                max_correspondence_distance=distance_threshold,
+                estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
+                ransac_n=3,
+                checkers=[
+                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold),
+                ],
+                criteria=o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999),
+            )
+            ransac_transformations.append(ransac.transformation)
+
+        # ICP REFINEMENT
+        best_transformation = None
+        best_fitness = -1
+        best_rmse = float('inf')
+
+        # Iterate through RANSAC initializations
+        for ransac_init in ransac_transformations:
+            # Perform ICP
+            icp = o3d.pipelines.registration.registration_icp(
+                source_pcd, target_pcd, threshold, ransac_init,
+                o3d.pipelines.registration.TransformationEstimationPointToPoint())
+
+            icp_fitness = icp.fitness
+            icp_rmse = icp.inlier_rmse
+
+            print(f"ICP Fitness = {icp_fitness}, ICP RMSE = {icp_rmse}")
+
+            # Update best transformation based on fitness and RMSE threshold
+            if icp_rmse < rmse_threshold and icp_fitness > best_fitness:
+                best_fitness = icp_fitness
+                best_rmse = icp_rmse
+                best_transformation = icp.transformation
+
+
+        # Check if a valid transformation was found
+        if best_transformation is not None:
+            print(f"Fitness = {best_fitness}, RMSE = {best_rmse}")
+            print("Transformation Matrix:")
+            print(best_transformation)
+
+            inverse_best_transformation = np.linalg.inv(best_transformation)
+            # Apply the best transformation to the target point cloud
+            transformed_target_pcd = target_pcd.transform(inverse_best_transformation)
+
+            # Visualize the final alignment
+            o3d.visualization.draw_geometries([source_pcd, transformed_target_pcd, axes])
+        else:
+            print(f"No valid transformation found within the RMSE threshold ({rmse_threshold}).")
+
+        # Vizualizers
+        ## o3d
+        if Enable_Open3D_Visualiser:
+            vis.add_geometry(target_pcd)
+            vis.add_geometry(transformed_target_pcd)
+            target_pcd.clear()
+            vis.update_geometry(target_pcd)
+            vis.update_geometry(transformed_target_pcd)
+            vis.poll_events()
+            vis.update_renderer()
+
+        ## OpenCV
+        if Enable_OpenCV_Visualiser:
+            now = time.time()
+            out.fill(0)
+            grid(out, (0, 0.5, 1), size=1, n=10)
+            # frustum(out, depth_intrinsics)
+            axes(out, view([0, 0, 0]), state.rotation, size=0.1, thickness=1)
+
+            if not state.scale or out.shape[:2] == (h, w):
+                pointcloud(out, verts, texcoords, color_source)
+            else:
+                tmp = np.zeros((h, w, 3), dtype=np.uint8)
+                pointcloud(tmp, verts, texcoords, color_source)
+                tmp = cv2.resize(
+                    tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
+                np.putmask(out, tmp > 0, tmp)   
+
+            if any(state.mouse_btns):
+                axes(out, view(state.pivot), state.rotation, thickness=4)
+
+            dt = time.time() - now
+
+            cv2.setWindowTitle(
+                state.WIN_NAME, "RealSense (%dx%d) %dFPS (%.2fms) %s" %
+                (w, h, 1.0/dt, dt*1000, "PAUSED" if state.paused else ""))
+
+            cv2.imshow(state.WIN_NAME, out)
+            key = cv2.waitKey(1)
+
+            if key == ord("p"):
+                state.paused ^= True
+
+            if key == ord("d"):
+                state.decimate = (state.decimate + 1) % 3
+                decimate.set_option(rs.option.filter_magnitude, 2 ** state.decimate)
+
+            if key == ord("z"):
+                state.scale ^= True
+
+            if key == ord("c"):
+                state.color ^= True
+
+            if key == ord("s"):
+                cv2.imwrite('./out.png', out)
+
+            if key == ord("e"):
+                points.export_to_ply('./out.ply', mapped_frame)
+
+            if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
+                break
+
         if read_recording:
             time.sleep(delta_T/1000)
-        ###
 
-        if key == ord("p"):
-            state.paused ^= True
-
-        if key == ord("d"):
-            state.decimate = (state.decimate + 1) % 3
-            decimate.set_option(rs.option.filter_magnitude, 2 ** state.decimate)
-
-        if key == ord("z"):
-            state.scale ^= True
-
-        if key == ord("c"):
-            state.color ^= True
-
-        if key == ord("s"):
-            cv2.imwrite('./out.png', out)
-
-        if key == ord("e"):
-            points.export_to_ply('./out.ply', mapped_frame)
-
-        if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
-            break
-   
 # Stop streaming
 finally:
     if not read_recording:
@@ -505,4 +577,4 @@ finally:
 
     if record_enabled:
         recording = np.asarray(recording, dtype=object)
-        np.save(f"/home/spot-vision/Documents/o3d_icp/Recording/myrecording{readrecording_segNUM}.npy", recording, allow_pickle=True)
+        np.save(record_video_path+str(recording_segNUM), recording, allow_pickle=True)
