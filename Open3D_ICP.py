@@ -1,8 +1,9 @@
+
 # -*- coding: utf-8 -*-
 """
 Created on Mon Nov 25 10:49:36 2024
 
-@author: Vision Subteam's Awesome Core Team, with the help of Alex
+@author: Vision's Awesome Core Team, with the help of Alex
 """
 
 # Import Statements
@@ -251,6 +252,28 @@ def pointcloud(out, verts, texcoords, color, painter=True):
     # perform uv-mapping
     out[i[m], j[m]] = color[u[m], v[m]]
 
+def execute_global_registration(source_down, target_down, source_fpfh,
+                                target_fpfh, voxel_size):
+    distance_threshold = voxel_size * 1.5
+    result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
+        source_down, target_down, source_fpfh, target_fpfh,
+        mutual_filter=True,
+        max_correspondence_distance=distance_threshold,
+        estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
+        ransac_n=3,
+        checkers=[
+            o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+            o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold),
+        ], criteria=o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999),)
+    return result
+
+def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size):
+    distance_threshold = voxel_size * 0.4
+    result = o3d.pipelines.registration.registration_icp(
+        source, target, distance_threshold, transform.transformation,
+        o3d.pipelines.registration.TransformationEstimationPointToPlane())
+    return result
+
 """
 USER INPUT START
 """
@@ -266,27 +289,28 @@ max_recorded_frame = 50 # Will record until max frame reached, then exit script.
 ## Video Intrinsics: "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy"
 
 read_video_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecording" # Path String with file name, without index nor extension
-read_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name, without extension
+read_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name
 
 record_video_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecording" # Path String with file name, without index nor extension
-record_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name, without extension
+record_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name
+
+pose_estimation_path = "/home/spot-vision/Documents/o3d_icp/pose_estimation/pose_estimation.csv" # Path String with file name with extension
+
+source = o3d.io.read_triangle_mesh("Target_v10.stl")
 """
 USER INPUT END
 """
 
 # RANSAC and ICP parameters
-voxel_size = 0.05  # Change depending on point cloud size
+voxel_size = 0.05  # (mm) Change depending on point cloud size
 radius_normal = voxel_size * 2
 radius_feature = voxel_size * 10
-distance_threshold = voxel_size * 3
-threshold = 0.1
 rmse_threshold = 0.05  # User-defined RMSE threshold
-num_ransac_iterations = 5
+# num_ransac_iterations = 5
 
 # Model Initialization
-## Load source mesh and convert to point cloud
+## Convert Source Mesh to point cloud
 origin = np.array([0, 0, 0])
-source = o3d.io.read_triangle_mesh("Target_v10.stl") ### REVISE FOR ORIN
 source_pcd = source.sample_points_poisson_disk(number_of_points=5000)
 source_pcd.scale(0.001, origin)
 source_down = source_pcd.voxel_down_sample(voxel_size) # Downsample and estimate normals for point cloud
@@ -363,7 +387,8 @@ i=0
 recording = [["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]]
 readrecording_frameNUM = 2 # If read recording frame iterator to replace camera stream. Skip 0 and 1 (column title + 1st frame)
 recording_segNUM = 1 # Video segment number, used for both read and write recording
-
+transform = None
+transform_array = []
 try:
     while run_loop:       
         # Live Camera
@@ -442,71 +467,43 @@ try:
         target_pcd.points = o3d.utility.Vector3dVector(verts)
         target_pcd = target_pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)[0]
         target_down = target_pcd.voxel_down_sample(voxel_size) # Downsample and estimate normals for point cloud
+        
         target_down.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))  
-
-        # Compute FPFH features
         target_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
             target_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
         
         # RANSAC
-        ransac_transformations = []
-        for _ in range(num_ransac_iterations):
-            ransac = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
-                source_down, target_down, source_fpfh, target_fpfh,
-                mutual_filter=True,
-                max_correspondence_distance=distance_threshold,
-                estimation_method=o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
-                ransac_n=3,
-                checkers=[
-                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
-                    o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold),
-                ],
-                criteria=o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999),
-            )
-            ransac_transformations.append(ransac.transformation)
+        if transform is None:
+            transform = execute_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
 
         # ICP REFINEMENT
+        transform = refine_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
+        transform_fitness = transform.fitness
+        transform_rmse = transform.inlier_rmse
+
         best_transformation = None
         best_fitness = -1
         best_rmse = float('inf')
 
-        # Iterate through RANSAC initializations
-        for ransac_init in ransac_transformations:
-            # Perform ICP
-            icp = o3d.pipelines.registration.registration_icp(
-                source_pcd, target_pcd, threshold, ransac_init,
-                o3d.pipelines.registration.TransformationEstimationPointToPoint())
-
-            icp_fitness = icp.fitness
-            icp_rmse = icp.inlier_rmse
-
-            print(f"ICP Fitness = {icp_fitness}, ICP RMSE = {icp_rmse}")
-
-            # Update best transformation based on fitness and RMSE threshold
-            if icp_rmse < rmse_threshold and icp_fitness > best_fitness:
-                best_fitness = icp_fitness
-                best_rmse = icp_rmse
-                best_transformation = icp.transformation
+        # Update best transformation based on fitness and RMSE threshold
+        if transform_rmse < rmse_threshold and transform_fitness > best_fitness:
+            best_fitness = transform_fitness
+            best_rmse = transform_rmse
+            best_transformation = transform.transformation
 
 
         # Check if a valid transformation was found
         if best_transformation is not None:
-            print(f"Fitness = {best_fitness}, RMSE = {best_rmse}")
-            print("Transformation Matrix:")
-            print(best_transformation)
-
-            inverse_best_transformation = np.linalg.inv(best_transformation)
-            # Apply the best transformation to the target point cloud
-            transformed_target_pcd = target_pcd.transform(inverse_best_transformation)
-
-            # Visualize the final alignment
-            o3d.visualization.draw_geometries([source_pcd, transformed_target_pcd, axes])
+            transform_array.append(frame_timestamp, transform, transform_fitness, transform_rmse) # SEND TO GNC, maybe after formatting Transform to X, yT, Theta
         else:
-            print(f"No valid transformation found within the RMSE threshold ({rmse_threshold}).")
+            transform = None # TO REVIEW LOGIC, DO WE WANT TO JUMP STRAIGHT BACK TO RANSAC OR TRY ICP AGAIN. Do we send data to GNC anyway? With fitness score?
 
         # Vizualizers
         ## o3d
-        if Enable_Open3D_Visualiser:
+        if Enable_Open3D_Visualiser and best_transformation is not None:
+            inverse_best_transformation = np.linalg.inv(best_transformation)
+            # Apply the best transformation to the target point cloud
+            transformed_target_pcd = target_pcd.transform(inverse_best_transformation)
             vis.add_geometry(target_pcd)
             vis.add_geometry(transformed_target_pcd)
             target_pcd.clear()
@@ -571,6 +568,7 @@ try:
 
 # Stop streaming
 finally:
+    np.savetxt(pose_estimation_path, transform_array, delimiter=',')
     if not read_recording:
         pipeline.stop()
         profile = pipeline = None
