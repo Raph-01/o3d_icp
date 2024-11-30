@@ -254,7 +254,7 @@ def pointcloud(out, verts, texcoords, color, painter=True):
 
 def execute_global_registration(source_down, target_down, source_fpfh,
                                 target_fpfh, voxel_size):
-    distance_threshold = voxel_size * 1.5
+    distance_threshold = voxel_size * 3 # 1.5
     result = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
         source_down, target_down, source_fpfh, target_fpfh,
         mutual_filter=True,
@@ -268,10 +268,14 @@ def execute_global_registration(source_down, target_down, source_fpfh,
     return result
 
 def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size):
-    distance_threshold = voxel_size * 0.4
+    distance_threshold = voxel_size * 2 # 0.4
+#    result = o3d.pipelines.registration.registration_icp(
+#       source, target, distance_threshold, transform.transformation,
+#        o3d.pipelines.registration.TransformationEstimationPointToPlane())
     result = o3d.pipelines.registration.registration_icp(
-        source, target, distance_threshold, transform.transformation,
-        o3d.pipelines.registration.TransformationEstimationPointToPlane())
+                source_pcd, target_pcd, distance_threshold, transform.transformation,
+                o3d.pipelines.registration.TransformationEstimationPointToPoint()
+            )
     return result
 
 """
@@ -282,27 +286,28 @@ Enable_Open3D_Visualiser = False
 Enable_OpenCV_Visualiser = False
 
 Select_Mode = "Read" # "Read" "Live" "Record Live"
+control_fps = False
 max_recorded_frame = 50 # Will record until max frame reached, then exit script. Condition checked only if Select_Mode == "Record Live"
 
 # Orin Paths
 ## Video: "/home/spot-vision/Documents/o3d_icp/Recording/myrecording"
 ## Video Intrinsics: "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy"
 
-read_video_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecording" # Path String with file name, without index nor extension
-read_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name
+read_video_path = "E:/Ecole/Carleton/Fall 2024/MAAE 4907 Q (Autonomous Spacecraft Vehicule)/Scripts/o3d_icp/recording/myrecording" # Path String with file name, without index nor extension
+read_video_intrinsics_path = "E:/Ecole/Carleton/Fall 2024/MAAE 4907 Q (Autonomous Spacecraft Vehicule)/Scripts/o3d_icp/recording/myrecordingintrinsics.npy" # Path String with file name
 
-record_video_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecording" # Path String with file name, without index nor extension
-record_video_intrinsics_path = "/home/spot-vision/Documents/o3d_icp/Recording/myrecordingintrinsics.npy" # Path String with file name
+record_video_path = "E:/Ecole/Carleton/Fall 2024/MAAE 4907 Q (Autonomous Spacecraft Vehicule)/Scripts/o3d_icp/recording/myrecording" # Path String with file name, without index nor extension
+record_video_intrinsics_path = "E:/Ecole/Carleton/Fall 2024/MAAE 4907 Q (Autonomous Spacecraft Vehicule)/Scripts/o3d_icp/recording/myrecordingintrinsics.npy" # Path String with file name
 
-pose_estimation_path = "/home/spot-vision/Documents/o3d_icp/pose_estimation/pose_estimation.csv" # Path String with file name with extension
+pose_estimation_path = "E:/Ecole/Carleton/Fall 2024/MAAE 4907 Q (Autonomous Spacecraft Vehicule)/Scripts/o3d_icp/pose_estimation/pose_estimation.csv" # Path String with file name with extension
 
-source = o3d.io.read_triangle_mesh("Target_v10.stl")
+source = o3d.io.read_triangle_mesh("E:/Ecole/Carleton/Fall 2024/MAAE 4907 Q (Autonomous Spacecraft Vehicule)/Scripts/o3d_icp/target_model/Target_v10.stl")
 """
 USER INPUT END
 """
 
 # RANSAC and ICP parameters
-voxel_size = 0.05  # (mm) Change depending on point cloud size
+voxel_size = 0.05  # (m) Change depending on point cloud size
 radius_normal = voxel_size * 2
 radius_feature = voxel_size * 10
 rmse_threshold = 0.05  # User-defined RMSE threshold
@@ -321,6 +326,10 @@ source_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
 
 # Set script states
 read_recording, record_enabled = (True, False) if Select_Mode == "Read" else (False, True) if Select_Mode == "Record Live" else (False, False)
+
+RotZ90 = np.array([[0,-1,0,0],[1,0,0,0],[0,0,1,0],[0,0,0,1]])
+RotX90 = np.array([[1,0,0,0],[0,0,-1,0],[0,1,0,0],[0,0,0,1]])
+transform_camera = np.dot(RotZ90,RotX90)
 
 # Configure depth and color streams
 if not read_recording:    
@@ -354,7 +363,7 @@ if not read_recording:
         recording_intrinsics = [w, h]
         np.save(record_video_intrinsics_path, recording_intrinsics, allow_pickle=True)
 else:
-    savedrecording = np.load(read_video_path+str(1), allow_pickle=True)
+    savedrecording = np.load(read_video_path+str(1)+".npy", allow_pickle=True)
     last_recordedtimestamp = savedrecording[1][3]
     savedrecordingintrinsics = np.load(read_video_intrinsics_path, allow_pickle=True)
     w, h = savedrecordingintrinsics[0], savedrecordingintrinsics[1]
@@ -399,7 +408,7 @@ try:
             depth_frame = frames.get_depth_frame()
             color_frame = frames.get_color_frame()
             frame_timestamp = frames.get_timestamp()
-            depth_frame = decimate.process(depth_frame)
+            # depth_frame = decimate.process(depth_frame)
 
             # Grab new intrinsics (may be changed by decimation)
             depth_intrinsics = rs.video_stream_profile(
@@ -428,6 +437,7 @@ try:
         # Reading a Recorded Video
         elif not state.paused and read_recording:
                 compoundframe = savedrecording[readrecording_frameNUM] # ["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]
+                frame_timestamp = compoundframe[3]
                 delta_T = compoundframe[3] - last_recordedtimestamp # (ms)
                 
                 last_recordedtimestamp = compoundframe[3] # Update last timestamp for next iteration
@@ -440,7 +450,8 @@ try:
                 if readrecording_frameNUM > len(savedrecording)-1:
                     try:
                         recording_segNUM += 1
-                        savedrecording = np.load(read_video_path+str(recording_segNUM), allow_pickle=True)
+                        savedrecording = np.load(read_video_path+str(recording_segNUM)+".npy", allow_pickle=True)
+                        print(recording_segNUM)
                         readrecording_frameNUM = 1
                     except Exception: # next segment doesnt exist -> end of recording reached
                         run_loop = False
@@ -450,7 +461,7 @@ try:
             
             if len(recording) >=10:
                 recording = np.asarray(recording, dtype=object)
-                np.save(record_video_path+str(recording_segNUM), recording, allow_pickle=True)
+                np.save(record_video_path+str(recording_segNUM)+".npy", recording, allow_pickle=True)
                 recording_segNUM += 1
                 recording = [["Depth Frame", "Color Frame", "Texture Coordinate", "Time Stamp"]]
 
@@ -461,7 +472,8 @@ try:
 
         # Pointcloud Vertices (verts) processing 
         ## remove background (index z not within  0-2m and delete that point)
-        indicesZ = np.where(not(0 < verts[:,2] > 2))[0] # find where 0 m > z > 2 m
+        #indicesZ = np.where(not(0 < verts[:,2] > 2))[0] # find where 0 m > z > 2 m
+        indicesZ = np.where(verts[:,2] > 2)[0] # find where z > 1.7 m
         verts = np.delete(verts, indicesZ, axis=0)
         
         target_pcd.points = o3d.utility.Vector3dVector(verts)
@@ -475,6 +487,7 @@ try:
         # RANSAC
         if transform is None:
             transform = execute_global_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
+            print("RANSAC")
 
         # ICP REFINEMENT
         transform = refine_registration(source_down, target_down, source_fpfh, target_fpfh, voxel_size)
@@ -494,9 +507,16 @@ try:
 
         # Check if a valid transformation was found
         if best_transformation is not None:
-            transform_array.append(frame_timestamp, transform, transform_fitness, transform_rmse) # SEND TO GNC, maybe after formatting Transform to X, yT, Theta
+            print(transform.transformation)
+            transform_relative = np.dot(transform_camera,transform.transformation) # Transform from camera frame to inertial standard
+            print(transform_relative)
+            transform_package = [transform_relative[0,3],transform_relative[1,3], transform_relative[1,1]] # X, Y, rotation of X-axis about Z (rad) [relative chaser-target]
+            print(transform_package)
+            transform_array.append([frame_timestamp, transform_package[0], transform_package[1],transform_package[2], transform_fitness, transform_rmse]) # SEND TRANSFORM ARRAY TO GNC
+            print("ICP SUCCESS")
         else:
             transform = None # TO REVIEW LOGIC, DO WE WANT TO JUMP STRAIGHT BACK TO RANSAC OR TRY ICP AGAIN. Do we send data to GNC anyway? With fitness score?
+            print("ICP FAIL")
 
         # Vizualizers
         ## o3d
@@ -563,7 +583,7 @@ try:
             if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
                 break
 
-        if read_recording:
+        if read_recording and control_fps:
             time.sleep(delta_T/1000)
 
 # Stop streaming
@@ -575,4 +595,4 @@ finally:
 
     if record_enabled:
         recording = np.asarray(recording, dtype=object)
-        np.save(record_video_path+str(recording_segNUM), recording, allow_pickle=True)
+        np.save(record_video_path+str(recording_segNUM)+".npy", recording, allow_pickle=True)
