@@ -22,10 +22,10 @@ import struct
 import copy
 
 ######################################### 1: User-defined Variables #######################################################
-Select_Mode = "Read" # "Read" "Live" "Record Live"
-platform = "Raph" # "Orin" "Raph" "Xavier"
+Select_Mode = "Live" # "Read" "Live" "Record Live"
+platform = "Orin" # "Orin" "Raph" "Xavier"
 send_package_udp = False # [bool]
-visualizer_enabled = True # [bool]
+visualizer_enabled = False # [bool]
 
 ######################################### 3: Functions #######################################################
 def draw_result(source_pcd, target_pcd, transformation):
@@ -116,14 +116,21 @@ def estimate_pose(transformation):
     gamma = np.arctan2(transformation[1,0], transformation[0,0])
     beta = np.arctan2(-transformation[2,0], np.sqrt(transformation[2,1]**2+transformation[2,2]**2))
     alpha = np.arctan2(transformation[2,1], transformation[2,2])
-    beta = round(np.rad2deg(beta),3) # Ry
-    alpha = round(np.rad2deg(alpha),3) # Rx
-    gamma = round(np.rad2deg(gamma),3) # Rz
+    #beta = round(np.rad2deg(beta),3) # Ry
+    #alpha = round(np.rad2deg(alpha),3) # Rx
+    #gamma = round(np.rad2deg(gamma),3) # Rz
     
+    beta = round(beta,3) # Ry
+    alpha = round(alpha,3) # Rx
+    gamma = round(gamma,3) # Rz
+
     # Translations [mm]
-    x = round(transformation[0, 3]*1000,2)
-    y = round(transformation[1, 3]*1000,2)
-    z = round(transformation[2, 3]*1000,2)
+    x = round(transformation[0, 3],4)
+    y = round(transformation[1, 3],4)
+    z = round(transformation[2, 3],4)
+    # x = round(transformation[0, 3]*1000,2)
+    # y = round(transformation[1, 3]*1000,2)
+    # z = round(transformation[2, 3]*1000,2)
     return [x, y, z, alpha, beta, gamma]
 
 def data_reduction_pcd(pcd, **kwargs):
@@ -351,7 +358,7 @@ try:
         target_pcd.points = o3d.utility.Vector3dVector(verts)
         target_pcd.transform(transform_camera) 
         
-        frame_timestamp = frame_data[3] # If recorded from old script index = 3, else index = 1
+        frame_timestamp = frame_data[1] # If recorded from old script index = 3, else index = 1
 
         # Data and noise reduction.
         if transform is None: # Coarse Reduction
@@ -409,8 +416,8 @@ try:
             continue
         
         if send_package_udp:
-            x, y, theta =  ICP_pose[0], ICP_pose[1], ICP_pose[5]
-            udp_data = bytearray(struct.pack("fff",x,y,theta))
+            x, y, theta, rmse_ICP=  ICP_pose[0], ICP_pose[1], ICP_pose[5], ICP_transform_rmse
+            udp_data = bytearray(struct.pack("fffff",x,y,theta,rmse_ICP, reset_counter))
             try:
                 sock.sendto(udp_data,server_address)
                 print(f"{time.strftime('%H:%M:%S')} UPD package sent: x={x}, y={y}, theta={theta}.")
@@ -425,9 +432,9 @@ try:
         if visualizer_enabled:
             draw_result(filtered_model_pcd, target_pcd, transform.transformation)
         
-        if not(reset_counter%20):
-            print("reset transform")
-            transform = None
+        # if not(reset_counter%20):
+        #    print("reset transform")
+        #    transform = None
         reset_counter +=1
 
 finally:
