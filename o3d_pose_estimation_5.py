@@ -107,7 +107,9 @@ def registration_RANSAC(model_down, target_down, model_fpfh, target_fpfh, distan
     best_ransac = None
     best_fitness = 0
     global visualizer_enabled
-    for i in range(5):    
+    i = 0
+    loop_flag = True
+    while loop_flag:    
         transform_RANSAC = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
             model_down, target_down, model_fpfh, target_fpfh, True,
             distance_threshold,
@@ -119,8 +121,12 @@ def registration_RANSAC(model_down, target_down, model_fpfh, target_fpfh, distan
         if transform_RANSAC.fitness > best_fitness:
             best_fitness = transform_RANSAC.fitness
             best_ransac = transform_RANSAC
-            if visualizer_enabled:
-                draw_result(filtered_model_pcd, target_pcd, best_ransac.transformation)
+            draw_result(filtered_model_pcd, target_pcd, best_ransac.transformation)
+        if best_fitness > 0.75 or i >1000:
+            loop_flag = False
+        i+=1
+    if visualizer_enabled:
+        draw_result(filtered_model_pcd, target_pcd, best_ransac.transformation)
     return best_ransac
 
 def estimate_pose(transformation):
@@ -206,18 +212,19 @@ transform_camera[1,3] = 0.087
 transform_model = np.dot(RotZ90,RotX90)
 
 # RANSAC and ICP parameters
-voxel_size_RANSAC_coarse = 0.03  # (m) Change depending on point cloud size
+# (same for icp except ICP threshold 
+voxel_size_RANSAC_coarse = 0.03  # (m) Change depending on point cloud size (0.05)
 radius_normal_RANSAC_coarse = voxel_size_RANSAC_coarse * 2
-radius_feature_RANSAC_coarse = voxel_size_RANSAC_coarse * 5
-distance_threshold_RANSAC_coarse = voxel_size_RANSAC_coarse * 2 # 1.5
+radius_feature_RANSAC_coarse = voxel_size_RANSAC_coarse * 5 (10)
+distance_threshold_RANSAC_coarse = voxel_size_RANSAC_coarse * 2 # 1.5 (3)
 
 voxel_size_RANSAC_fine = 0.01
 radius_normal_RANSAC_fine = voxel_size_RANSAC_fine * 2
 radius_feature_RANSAC_fine = voxel_size_RANSAC_fine * 5
 distance_threshold_RANSAC_fine = voxel_size_RANSAC_fine * 2 # 1.5
 
-voxel_size_ICP = 0.01
-distance_threshold_ICP = voxel_size_ICP * 0.4 # 0.4
+voxel_size_ICP = 0.01 # (0.05)
+distance_threshold_ICP = voxel_size_ICP * 0.4 # 0.4 (10)
 
 # Set script states
 read_recording, record_enabled = (True, False) if Select_Mode == "Read" else (False, True) if Select_Mode == "Record Live" else (False, False)
