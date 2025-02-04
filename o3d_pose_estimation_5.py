@@ -116,13 +116,13 @@ def registration_RANSAC(model_down, target_down, model_fpfh, target_fpfh, distan
             o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
             3, [o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
             o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold)
-            ], o3d.pipelines.registration.RANSACConvergenceCriteria(100000, 0.999))
+            ], o3d.pipelines.registration.RANSACConvergenceCriteria(4000000, 1000))
         print(f"{i} Ransac {transform_RANSAC.fitness}")
         if transform_RANSAC.fitness > best_fitness:
             best_fitness = transform_RANSAC.fitness
             best_ransac = transform_RANSAC
             draw_result(model_down, target_down, best_ransac.transformation)
-        if best_fitness > 0.75 or i >1000:
+        if best_fitness > 0.75 or i > 4:
             loop_flag = False
         i+=1
     if visualizer_enabled:
@@ -216,7 +216,7 @@ transform_model = np.dot(RotZ90,RotX90)
 voxel_size_RANSAC_coarse = 0.03  # (m) Change depending on point cloud size (0.05)
 radius_normal_RANSAC_coarse = voxel_size_RANSAC_coarse * 2
 radius_feature_RANSAC_coarse = voxel_size_RANSAC_coarse * 5 # (10)
-distance_threshold_RANSAC_coarse = voxel_size_RANSAC_coarse * 1.5 # 1.5 (3)
+distance_threshold_RANSAC_coarse = voxel_size_RANSAC_coarse * 2 # 1.5 (3)
 
 voxel_size_RANSAC_fine = 0.01
 radius_normal_RANSAC_fine = voxel_size_RANSAC_fine * 2
