@@ -121,12 +121,12 @@ def registration_RANSAC(model_down, target_down, model_fpfh, target_fpfh, distan
         if transform_RANSAC.fitness > best_fitness:
             best_fitness = transform_RANSAC.fitness
             best_ransac = transform_RANSAC
-            draw_result(filtered_model_pcd, target_pcd, best_ransac.transformation)
+            draw_result(model_down, target_down, best_ransac.transformation)
         if best_fitness > 0.75 or i >1000:
             loop_flag = False
         i+=1
     if visualizer_enabled:
-        draw_result(filtered_model_pcd, target_pcd, best_ransac.transformation)
+        draw_result(model_down, target_down, best_ransac.transformation)
     return best_ransac
 
 def estimate_pose(transformation):
@@ -215,7 +215,7 @@ transform_model = np.dot(RotZ90,RotX90)
 # (same for icp except ICP threshold 
 voxel_size_RANSAC_coarse = 0.03  # (m) Change depending on point cloud size (0.05)
 radius_normal_RANSAC_coarse = voxel_size_RANSAC_coarse * 2
-radius_feature_RANSAC_coarse = voxel_size_RANSAC_coarse * 5 (10)
+radius_feature_RANSAC_coarse = voxel_size_RANSAC_coarse * 5 # (10)
 distance_threshold_RANSAC_coarse = voxel_size_RANSAC_coarse * 2 # 1.5 (3)
 
 voxel_size_RANSAC_fine = 0.01
@@ -295,7 +295,7 @@ try:
     model_fpfh = o3d.pipelines.registration.compute_fpfh_feature(
         model_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature_RANSAC_fine, max_nn=100))
     
-    filtered_model_pcd.paint_uniform_color([1, 0, 0]) # Red
+    model_down.paint_uniform_color([1, 0, 0]) # Red
     
     # Create the coordinate axis (standard Open3D axes with 1m length by default)
     axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3, origin=origin)  # Size=0.3m (30cm)
@@ -408,7 +408,8 @@ try:
                 RANSAC_timestamp = time.strftime('%H:%M:%S')
                 print(RANSAC_pose)
                 if visualizer_enabled:
-                    draw_result(filtered_model_pcd, target_pcd, transform.transformation)
+                    draw_result(model_down, target_down, transform.transformation)
+                target_pcd = data_reduction_pcd(target_pcd)
                 """UNCOMMENT BELOW TO TEST RANDSAC ONLY""" 
                 # transform = None
                 # continue
@@ -456,7 +457,7 @@ try:
                                 ICP_transform_fitness, ICP_transform_rmse, RANSAC_transform_fitness, RANSAC_transform_rmse])
 
         if visualizer_enabled:
-            draw_result(filtered_model_pcd, target_pcd, transform.transformation)
+            draw_result(model_down, target_pcd, transform.transformation)
         
         # if not(reset_counter%20):
         #    print("reset transform")
