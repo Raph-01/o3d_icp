@@ -34,7 +34,7 @@ def draw_result(source_pcd, target_pcd, transformation):
     source_pcd_temp.transform(transformation)
     source_pcd_temp.paint_uniform_color([0, 0, 1]) # Blue
     target_pcd_temp.paint_uniform_color([1, 0, 0]) # Red
-    o3d.visualization.draw_geometries([source_pcd_temp,target_pcd_temp])
+    o3d.visualization.draw_geometries([source_pcd_temp,target_pcd_temp, axis])
 
 def read_recorded_data():
     global savedrecording_frameNUM
@@ -112,7 +112,7 @@ def registration_RANSAC(model_down, target_down, model_fpfh, target_fpfh, distan
     while loop_flag:    
         transform_RANSAC = o3d.pipelines.registration.registration_ransac_based_on_feature_matching(
             model_down, target_down, model_fpfh, target_fpfh, True,
-            distance_threshold,
+            distance_threshold, 
             o3d.pipelines.registration.TransformationEstimationPointToPoint(False),
             3, [o3d.pipelines.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
             o3d.pipelines.registration.CorrespondenceCheckerBasedOnDistance(distance_threshold)
@@ -216,7 +216,7 @@ transform_model = np.dot(RotZ90,RotX90)
 voxel_size_RANSAC_coarse = 0.03  # (m) Change depending on point cloud size (0.05)
 radius_normal_RANSAC_coarse = voxel_size_RANSAC_coarse * 2
 radius_feature_RANSAC_coarse = voxel_size_RANSAC_coarse * 5 # (10)
-distance_threshold_RANSAC_coarse = voxel_size_RANSAC_coarse * 2 # 1.5 (3)
+distance_threshold_RANSAC_coarse = voxel_size_RANSAC_coarse * 1.5 # 1.5 (3)
 
 voxel_size_RANSAC_fine = 0.01
 radius_normal_RANSAC_fine = voxel_size_RANSAC_fine * 2
@@ -425,7 +425,7 @@ try:
         # ICP REFINEMENT
         try:
             target_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-            transform = registration_ICP_point2plane(model_pcd, target_pcd, distance_threshold_ICP, transform)
+            transform = registration_ICP_point2plane(model_down, target_pcd, distance_threshold_ICP, transform)
             ICP_transform_fitness = transform.fitness
             ICP_transform_rmse = transform.inlier_rmse
             print(f"{time.strftime('%H:%M:%S')} ICP Success")
