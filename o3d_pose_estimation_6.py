@@ -24,11 +24,20 @@ import copy
 
 ######################################### 1: User-defined Variables #######################################################
 Select_Mode = "Read" # "Read" "Live" "Record Live"
-platform = "Orin" # "Orin" "Raph" "Xavier"
-send_package_udp = True # [bool]
-visualizer_enabled = True # [bool]
+platform = "Raph" # "Orin" "Raph" "Xavier"
+send_package_udp = False # [bool]
+visualizer_enabled = False # [bool]
 
 ######################################### 3: Functions #######################################################
+def read_specific_frame(seg_num, frame_num):
+    try:
+        savedrecording = np.load(read_video_path+str(seg_num)+".npy", allow_pickle=True)
+        my_frame_data = savedrecording[frame_num] # ["Depth Verts", "Time Stamp"]
+        print(f"Video segment {seg_num}, frame {frame_num} successfully loaded")
+    except Exception as e:
+        print(e)
+    return my_frame_data
+
 def draw_result(source_pcd, target_pcd, transformation):
     source_pcd_temp = copy.deepcopy(source_pcd)
     target_pcd_temp = copy.deepcopy(target_pcd)
@@ -190,19 +199,11 @@ def estimate_pose(transformation):
     beta = round(np.rad2deg(beta),3) # Ry
     alpha = round(np.rad2deg(alpha),3) # Rx
     gamma = round(np.rad2deg(gamma),3) # Rz
-    
-    # In Rad
-    # beta = round(beta,3) # Ry
-    # alpha = round(alpha,3) # Rx
-    # gamma = round(gamma,3) # Rz
 
-    # Translations [mm]
+    # Translations [m]
     x = round(transformation[0, 3],4)
     y = round(transformation[1, 3],4)
     z = round(transformation[2, 3],4)
-    # x = round(transformation[0, 3]*1000,2)
-    # y = round(transformation[1, 3]*1000,2)
-    # z = round(transformation[2, 3]*1000,2)
     return [x, y, z, alpha, beta, gamma]
 
 def pcd_downsample_fpfh(pcd, voxel_size, radius_normal, radius_feature):
@@ -213,42 +214,18 @@ def pcd_downsample_fpfh(pcd, voxel_size, radius_normal, radius_feature):
         model_down, o3d.geometry.KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
     return model_down, model_fpfh
 
-def data_reduction_pcd(pcd, **kwargs):
+def data_reduction_pcd(pcd):
     pcd_reduced = o3d.geometry.PointCloud()
-    centre = kwargs.get('target_transform', None)
     verts = np.array(pcd.points)
 
-    if centre is not None:
-        distance_X = centre[0, 3]
-        distance_Y = centre[1, 3]
-        offset_x = 0.5
-        offset_y = 1
-        # Remove points that are too far (X-axis)
-        indicesXfar = np.where(verts[:,0] > distance_X+offset_x)[0] # find where centre + /2 target thickness
-        verts = np.delete(verts, indicesXfar, axis=0)
+    # Remove points that are too far (X-axis)
+    indicesXfar = np.where(verts[:,0] > 4)[0] # find where X > 4 m
+    verts = np.delete(verts, indicesXfar, axis=0)
 
-        # Remove points that are too close (X-axis)
-        indicesXclose = np.where(verts[:,0] < distance_X-offset_x)[0] # find where centre - /2 target thickness
-        verts = np.delete(verts, indicesXclose, axis=0)
-    
-        # Remove points that are too far (Y-axis)
-        indicesYright = np.where(verts[:,1] > distance_Y+offset_y)[0] # find where centre + /2 target thickness
-        verts = np.delete(verts, indicesYright, axis=0)
+    # Remove points that are too close (X-axis)
+    indicesXclose = np.where(verts[:,0] <= 0)[0] # find where X <= 0 m
+    verts = np.delete(verts, indicesXclose, axis=0)
 
-        # Remove points that are too close (Y-axis)
-        indicesYleft = np.where(verts[:,1] < distance_Y-offset_y)[0] # find where centre - /2 target thickness
-        verts = np.delete(verts, indicesYleft, axis=0)
-    
-    else:
-        # Remove points that are too far (X-axis)
-        indicesXfar = np.where(verts[:,0] > 4)[0] # find where X > 4 m
-        verts = np.delete(verts, indicesXfar, axis=0)
-
-        # Remove points that are too close (X-axis)
-        indicesXclose = np.where(verts[:,0] <= 0)[0] # find where X <= 0 m
-        verts = np.delete(verts, indicesXclose, axis=0)
-
-    # *** For Y-axis, signs are resversed for some reason. Added top crop (will need to be updated for MECH mechanism. Too remove myself, is not needed if no manipulator)
     # Remove points that are too low (camera Y-axis). Is the target reflection
     indicesZhigh = np.where(verts[:,2] > 0.15)[0] # find where Z < 0.15 m (15cm)
     verts = np.delete(verts, indicesZhigh, axis=0)
@@ -275,7 +252,7 @@ RotX90 = np.array([[1,0,0,0],[0,0,-1,0],[0,1,0,0],[0,0,0,1]])
 transform_camera = np.dot(RotY90, RotZNeg90)
 # transform_camera[0,3] = 0.15
 # transform_camera[1,3] = 0.087
-transform_model = np.dot(RotZ90,RotX90)
+
 origin = np.array([0, 0, 0])
 axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3, origin=origin)
 
@@ -366,7 +343,7 @@ recording = [recording_header]
 transform = None
 transform_array_header = ["frame_timestamp",
                           "ICP_timestamp", "ICP_x", "ICP_y", "ICP_z", "ICP_Rx", "ICP_Ry", "ICP_Rz",
-                          "RANSAC_timestamp", "RANSAC_x", "RANSAC_y", "RANSAC_z", "RANSAC_Rx", "RANSAC_Ry", "RANSAC_Rz",
+                          "RANSAC_timestamp", "num_RANSAC_iter", "time_RANSAC", "RANSAC_x", "RANSAC_y", "RANSAC_z", "RANSAC_Rx", "RANSAC_Ry", "RANSAC_Rz",
                           "ICP_fitness", "ICP_rmse", "RANSAC_fitness", "RANSAC_rmse",
                           "ground_truth_x", "ground_truth_y", "ground_truth_theta"]
 transform_array = [transform_array_header]
@@ -405,10 +382,14 @@ try:
         
         # Reading a Recorded Video
         elif read_recording:
+            frame_data = read_specific_frame(1, 1)
+            if reset_counter > 100:
+                break
+            """
             frame_data, run_loop = read_recorded_data() # read_recorded_data sets run_loop used to flag the end of the recording
             if not(run_loop):
                 break
-
+            """
         verts = frame_data[0]
         target_pcd.points = o3d.utility.Vector3dVector(verts)
         target_pcd.transform(transform_camera)
@@ -420,8 +401,11 @@ try:
         frame_timestamp = frame_data[3] # If recorded from old script index = 3, else index = 1
         
         # RANSAC
-        if transform is None:
+        if True:
+        # if transform is None:
             ransac_valid = False
+            num_RANSAC_iter = 0
+            ransac_start = time.time()
             while not(ransac_valid):
                 try: 
                     transform = registration_RANSAC(model_down, target_down, model_fpfh, target_fpfh, distance_threshold_RANSAC, ransac_confidence)
@@ -435,9 +419,12 @@ try:
                                         # Check if RANSAC output is valid
                     valid_Rx = RANSAC_pose[3]%180 < 5 or RANSAC_pose[3]%180 > 175
                     valid_Ry = RANSAC_pose[3]%180 < 5 or RANSAC_pose[3]%180 > 175
-                    valid_fitness = RANSAC_transform_fitness > 0.5
-                    ransac_valid = valid_Rx and valid_Ry and valid_fitness
+                    ransac_valid = valid_Rx and valid_Ry
                     print(f"Ransac valid: {ransac_valid}")
+                    time_RANSAC = time.time() - ransac_start
+
+                    if num_RANSAC_iter > 25 or time_RANSAC > 1: # Force next frame
+                        continue
 
                 except KeyboardInterrupt:
                     print("\nCtrl+C pressed, exiting loop...")
@@ -447,7 +434,7 @@ try:
                     transform = None
                     print(f"{time.strftime('%H:%M:%S')} RANSAC Fail")
                     continue
-
+        
         if visualizer_enabled:
             draw_result(model_down, target_down, transform.transformation)
 
@@ -497,7 +484,7 @@ try:
 
         transform_array.append([frame_timestamp,
                                 ICP_timestamp, transform_result_x, transform_result_y, ICP_pose[2], ICP_pose[3], ICP_pose[4], ICP_pose[5],
-                                RANSAC_timestamp, RANSAC_pose[0], RANSAC_pose[1], RANSAC_pose[2], RANSAC_pose[3], RANSAC_pose[4], RANSAC_pose[5],
+                                RANSAC_timestamp, num_RANSAC_iter, time_RANSAC,  RANSAC_pose[0], RANSAC_pose[1], RANSAC_pose[2], RANSAC_pose[3], RANSAC_pose[4], RANSAC_pose[5],
                                 ICP_transform_fitness, ICP_transform_rmse, RANSAC_transform_fitness, RANSAC_transform_rmse,
                                 ground_truth_x, ground_truth_y, ground_truth_theta])
 
